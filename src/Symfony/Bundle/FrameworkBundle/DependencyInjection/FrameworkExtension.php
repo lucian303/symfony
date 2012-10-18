@@ -49,17 +49,21 @@ class FrameworkExtension extends Extension
 
         if ($container->getParameter('kernel.debug')) {
             $loader->load('debug.xml');
-            $container->setDefinition('event_dispatcher', $container->findDefinition('debug.event_dispatcher'));
-            $container->setAlias('debug.event_dispatcher', 'event_dispatcher');
 
-            $container->setDefinition('controller_resolver', $container->findDefinition('debug.controller_resolver'));
-            $container->setAlias('debug.controller_resolver', 'controller_resolver');
+            // only HttpKernel needs the debug event dispatcher
+            $definition = $container->findDefinition('http_kernel');
+            $arguments = $definition->getArguments();
+            $arguments[0] = new Reference('debug.event_dispatcher');
+            $arguments[2] = new Reference('debug.controller_resolver');
+            $definition->setArguments($arguments);
         }
 
         $configuration = $this->getConfiguration($configs, $container);
         $config = $this->processConfiguration($configuration, $configs);
 
-        $container->setParameter('kernel.secret', $config['secret']);
+        if (isset($config['secret'])) {
+            $container->setParameter('kernel.secret', $config['secret']);
+        }
 
         $container->setParameter('kernel.trust_proxy_headers', $config['trust_proxy_headers']);
 
@@ -155,6 +159,9 @@ class FrameworkExtension extends Extension
         if (isset($config['csrf_protection'])) {
             if (!isset($config['session'])) {
                 throw new \LogicException('CSRF protection needs that sessions are enabled.');
+            }
+            if (!isset($config['secret'])) {
+                throw new \LogicException('CSRF protection needs a secret to be set.');
             }
             $loader->load('form_csrf.xml');
 

@@ -76,6 +76,29 @@ abstract class AbstractProcessTest extends \PHPUnit_Framework_TestCase
         $this->assertSame($expected, $p->getErrorOutput());
     }
 
+    public function chainedCommandsOutputProvider()
+    {
+        return array(
+            array('11', ';', '1'),
+            array('22', '&&', '2'),
+        );
+    }
+
+    /**
+     *
+     * @dataProvider chainedCommandsOutputProvider
+     */
+    public function testChainedCommandsOutput($expected, $operator, $input)
+    {
+        if (defined('PHP_WINDOWS_VERSION_BUILD')) {
+            $this->markTestSkipped('Does it work on windows ?');
+        }
+
+        $process = $this->getProcess(sprintf('echo -n %s %s echo -n %s', $input, $operator, $input));
+        $process->run();
+        $this->assertEquals($expected, $process->getOutput());
+    }
+
     public function testCallbackIsExecutedForOutput()
     {
         $p = $this->getProcess(sprintf('php -r %s', escapeshellarg('echo \'foo\';')));
@@ -215,6 +238,24 @@ abstract class AbstractProcessTest extends \PHPUnit_Framework_TestCase
         $process->start();
         $process->stop();
         $this->assertEquals(SIGTERM, $process->getTermSignal());
+    }
+
+    public function testRestart()
+    {
+        $process1 = $this->getProcess('php -r "echo getmypid();"');
+        $process1->run();
+        $process2 = $process1->restart();
+
+        usleep(300000); // wait for output
+
+        // Ensure that both processed finished and the output is numeric
+        $this->assertFalse($process1->isRunning());
+        $this->assertFalse($process2->isRunning());
+        $this->assertTrue(is_numeric($process1->getOutput()));
+        $this->assertTrue(is_numeric($process2->getOutput()));
+
+        // Ensure that restart returned a new process by check that the output is different
+        $this->assertNotEquals($process1->getOutput(), $process2->getOutput());
     }
 
     public function testPhpDeadlock()
