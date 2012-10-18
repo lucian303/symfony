@@ -150,6 +150,20 @@ class Process
         $this->stop();
     }
 
+    public function __clone()
+    {
+        $this->exitcode = null;
+        $this->fallbackExitcode = null;
+        $this->processInformation = null;
+        $this->stdout = null;
+        $this->stderr = null;
+        $this->pipes = null;
+        $this->process = null;
+        $this->status = self::STATUS_READY;
+        $this->fileHandles = null;
+        $this->readBytes = null;
+    }
+
     /**
      * Runs the process.
      *
@@ -230,8 +244,6 @@ class Process
                 $descriptors = array_merge($descriptors, array(array('pipe', 'w')));
 
                 $this->commandline = '('.$this->commandline.') 3>/dev/null; code=$?; echo $code >&3; exit $code';
-            } else {
-                $this->commandline = 'exec ' . $this->commandline;
             }
         }
 
@@ -312,6 +324,33 @@ class Process
         }
 
         $this->updateStatus();
+    }
+
+    /**
+     * Restarts the process.
+     *
+     * Be warned that the process is cloned before being started.
+     *
+     * @param callable $callback A PHP callback to run whenever there is some
+     *                           output available on STDOUT or STDERR
+     *
+     * @return Process The new process
+     *
+     * @throws \RuntimeException When process can't be launch or is stopped
+     * @throws \RuntimeException When process is already running
+     *
+     * @see start()
+     */
+    public function restart($callback = null)
+    {
+        if ($this->isRunning()) {
+            throw new \RuntimeException('Process is already running');
+        }
+
+        $process = clone $this;
+        $process->start($callback);
+
+        return $process;
     }
 
     /**
@@ -542,7 +581,7 @@ class Process
     }
 
     /**
-     * Returns the number of the signal that caused the child process to stop its execution
+     * Returns the number of the signal that caused the child process to stop its execution.
      *
      * It is only meaningful if hasBeenStopped() returns true.
      *
@@ -613,26 +652,55 @@ class Process
         return $this->exitcode;
     }
 
+    /**
+     * Adds a line to the STDOUT stream.
+     *
+     * @param string $line The line to append
+     */
     public function addOutput($line)
     {
         $this->stdout .= $line;
     }
 
+    /**
+     * Adds a line to the STDERR stream.
+     *
+     * @param string $line The line to append
+     */
     public function addErrorOutput($line)
     {
         $this->stderr .= $line;
     }
 
+    /**
+     * Gets the command line to be executed.
+     *
+     * @return string The command to execute
+     */
     public function getCommandLine()
     {
         return $this->commandline;
     }
 
+    /**
+     * Sets the command line to be executed.
+     *
+     * @param string $commandline The command to execute
+     *
+     * @return self The current Process instance
+     */
     public function setCommandLine($commandline)
     {
         $this->commandline = $commandline;
+
+        return $this;
     }
 
+    /**
+     * Gets the process timeout.
+     *
+     * @return integer|null The timeout in seconds or null if it's disabled
+     */
     public function getTimeout()
     {
         return $this->timeout;
@@ -643,14 +711,18 @@ class Process
      *
      * To disable the timeout, set this value to null.
      *
-     * @param integer|null
+     * @param integer|null $timeout The timeout in seconds
+     *
+     * @return self The current Process instance
+     *
+     * @throws \InvalidArgumentException if the timeout is negative
      */
     public function setTimeout($timeout)
     {
         if (null === $timeout) {
             $this->timeout = null;
 
-            return;
+            return $this;
         }
 
         $timeout = (integer) $timeout;
@@ -660,56 +732,130 @@ class Process
         }
 
         $this->timeout = $timeout;
+
+        return $this;
     }
 
+    /**
+     * Gets the working directory.
+     *
+     * @return string The current working directory
+     */
     public function getWorkingDirectory()
     {
         return $this->cwd;
     }
 
+    /**
+     * Sets the current working directory.
+     *
+     * @param string $cwd The new working directory
+     *
+     * @return self The current Process instance
+     */
     public function setWorkingDirectory($cwd)
     {
         $this->cwd = $cwd;
+
+        return $this;
     }
 
+    /**
+     * Gets the environment variables.
+     *
+     * @return array The current environment variables
+     */
     public function getEnv()
     {
         return $this->env;
     }
 
+    /**
+     * Sets the environment variables.
+     *
+     * @param array $env The new environment variables
+     *
+     * @return self The current Process instance
+     */
     public function setEnv(array $env)
     {
         $this->env = $env;
+
+        return $this;
     }
 
+    /**
+     * Gets the contents of STDIN.
+     *
+     * @return string The current contents
+     */
     public function getStdin()
     {
         return $this->stdin;
     }
 
+    /**
+     * Sets the contents of STDIN.
+     *
+     * @param string $stdin The new contents
+     *
+     * @return self The current Process instance
+     */
     public function setStdin($stdin)
     {
         $this->stdin = $stdin;
+
+        return $this;
     }
 
+    /**
+     * Gets the options for proc_open.
+     *
+     * @return array The current options
+     */
     public function getOptions()
     {
         return $this->options;
     }
 
+    /**
+     * Sets the options for proc_open.
+     *
+     * @param array $options The new options
+     *
+     * @return self The current Process instance
+     */
     public function setOptions(array $options)
     {
         $this->options = $options;
+
+        return $this;
     }
 
+    /**
+     * Gets whether or not Windows compatibility is enabled
+     *
+     * This is true by default.
+     *
+     * @return Boolean
+     */
     public function getEnhanceWindowsCompatibility()
     {
         return $this->enhanceWindowsCompatibility;
     }
 
+    /**
+     * Sets whether or not Windows compatibility is enabled
+     *
+     * @param Boolean $enhance
+     *
+     * @return self The current Process instance
+     */
     public function setEnhanceWindowsCompatibility($enhance)
     {
         $this->enhanceWindowsCompatibility = (Boolean) $enhance;
+
+        return $this;
     }
 
     /**
@@ -730,10 +876,14 @@ class Process
      * the --enable-sigchild option
      *
      * @param Boolean $enhance
+     *
+     * @return self The current Process instance
      */
     public function setEnhanceSigchildCompatibility($enhance)
     {
         $this->enhanceSigchildCompatibility = (Boolean) $enhance;
+
+        return $this;
     }
 
     /**
